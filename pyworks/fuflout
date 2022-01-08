@@ -1,0 +1,106 @@
+#!/usr/bin/python
+'''service programm for deleting TUSU ffout.rgs files
+   v.0.04 jul,21 2021
+   author: RDV
+   '''
+#############################################################
+# Put this file to /usr/local/bin/ :
+#    cp fuflout /usr/local/bin
+#    chmod +x /usr/local/bin/
+# Set cron by :
+#    crontab -e
+# and add string :
+#    1 9 15 * * /usr/local/bin/fuflout >> /home/rti/ffout.log
+# this will start script at 09:01 15th day of every month and
+# write stdout report in /home/rti/ffout.log
+#############################################################
+import telnetlib
+import sys
+from time import ctime, time, localtime, mktime, sleep, strftime, strptime
+
+TIME_OFFSET = 4194304  # time cut for deleting in seconds(4194304: about 1.5 monts)
+IPtuple = (None, ('s', '37', '43'), ('s', '45', '244'), ('s', '57', '59'), \
+    ('s', '35', '46'), ('s', '187', '185'), ('s', '245', '246'), ('g', '162', '161'), \
+    ('g', '47', '44'), ('g', '40', '186'), ('g', '41', '242'), ('g', '158', '56'), \
+    ('g', '160', '36'), None, ('k', '34', '163'), ('g', '247', '248'), ('g', '249', '250'))
+DEBUG = False  # True - for debugg; also `./fuflout -d` will enter in debug mode
+
+
+def argument_parse():
+    try:
+        if sys.argv[1] == '-d':
+            return True
+        else:
+            print "Invalid argument.\nExit"
+            sys.exit()
+    except IndexError:
+        return False
+
+
+def main():
+    debug = argument_parse() or DEBUG
+    print "\n\t========================================"
+    print "\t\t", ctime()
+    print "\t========================================"
+    rek_cnt = 0
+    for rek in IPtuple:
+        rek_cnt += 1
+        if not rek:
+            continue
+        tusu_cnt = -1
+        for tusu in rek:
+            tusu_cnt += 1
+            #if not tusu.isdigit():
+            if type(tusu) == str and not tusu.isdigit():
+                continue
+            summary_header = "MP" + rek[0].upper() + " A" + str(rek_cnt)+ "  TUSU:" + str(tusu_cnt) + "  "
+            sys.stdout.write(summary_header)
+            ip_addr = '192.168.110.' + tusu
+            try:
+                tn = telnetlib.Telnet(ip_addr)
+
+                tn.read_until("login: ", 2)
+                tn.write("root\n")
+                tn.read_until("Password: ", 2)
+                tn.write("f2line.\n")
+                tn.read_until("->", 2)
+
+                cmnd_cd = "cd /export/home/user/mp" + rek[0] + "r/\n"
+                tn.write(cmnd_cd)
+                tn.write("ls\n")
+                sleep(0.2)
+                ff_list = [f for f in tn.read_very_eager().split() if f.startswith("ffout-")]
+                try:
+                    time_cut =\
+int(strftime('%Y%m%d%H%M', localtime(mktime(strptime(str(max(\
+map(lambda x: int(x[6:14]+x[15:19]), ff_list))), '%Y%m%d%H%M')) - TIME_OFFSET)))
+                except ValueError:
+                    print "NO ffout- files !"
+                    tn.close()
+                    continue
+
+                ff_cuts = filter(lambda x: int(x[6:14]+x[15:19]) < time_cut, \
+[f for f in ff_list if f.startswith("ffout-")])
+                summary_body = "Total: %d file(s); " % len(ff_list)
+                sys.stdout.write(summary_body)
+                if ff_cuts:
+                    print "%d file(s) to remove:\n\t%s" % (len(ff_cuts), ff_cuts)
+                    if debug:
+                        print "\t(debug mode - nothing will be removed :)" 
+                        tn.close()
+                        continue
+                    cmnd_rm = 'rm ' + ' '.join(ff_cuts) + '\n'
+		    print "\tsend `rm` command...\n", cmnd_rm
+		    #tn.write(cmnd_rm)
+		    sleep(0.2)
+                else:
+                    print "nothing to remove"
+                tn.close()
+            except telnetlib.socket.error:
+                print "\t--- socket error ---"
+			
+
+if __name__ == "__main__":
+    
+    main()
+

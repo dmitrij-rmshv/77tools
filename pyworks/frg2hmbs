@@ -1,0 +1,82 @@
+#!/usr/bin/python
+'''service programm for deleting 2 hundred megabites .frg files
+   from UVK-s
+   v.0.02 jul,26 2021
+   author: RDV
+   '''
+################################################################
+# Put this file to /usr/local/bin/ :
+#    cp fuflout /usr/local/bin
+#    chmod +x /usr/local/bin/
+# Set cron by :
+#    crontab -e
+# and add string :
+#    1 9 16 * * /usr/local/bin/fuflout >> /home/user/frg2hmb.log
+# this will start script at 09:01 16th day of every month and
+# write stdout report in /home/user/frg2hmb.log
+################################################################
+import telnetlib
+import sys
+from time import ctime, time, localtime, mktime, sleep, strftime, strptime
+
+IPtuple = (None, '93', '7', '9')
+
+
+def argparse():
+    try:
+        if sys.argv[1].isdigit() and 0 < int(sys.argv[1]) < 255:
+            return (sys.argv[1], )
+        else:
+            print "Invalid argument.\nExit"
+            sys.exit()
+    except IndexError:
+        return False
+
+
+def main():
+    uvk_s = argparse() or IPtuple
+    print "\n\t========================================"
+    print "\t\t", ctime()
+    uvk_cnt = 0
+    for uvk in uvk_s:
+        uvk_cnt += 1
+        if not uvk:
+            continue
+        
+        print "\t========================================"
+	print "\t\t\tUVK", uvk_cnt
+        ip_addr = "192.168.110." + uvk
+        try:
+            tn = telnetlib.Telnet(ip_addr)
+            tn.read_until("login: ", 2)
+            tn.write("root\n")
+            tn.read_until("Password: ", 2)
+            tn.write("f2line.\n")
+            tn.read_until("->", 2)
+            cmnd_cd = "cd /export/home/user/fpo/exec77ya6/lib\n"
+            tn.write(cmnd_cd)
+            tn.write("ls -l|awk '$5 > 200000000'\n")
+            sleep(0.2)
+            f200_list = [f for f in tn.read_very_eager().split('\n') if f.endswith('.frg\r')]
+            victim_list = []
+	    sum_volume = 0
+	    for frg in f200_list:
+	        frg_name = frg.split()[-1]
+		victim_list.append(frg_name)
+		frg_volume = int(frg.split()[-5])
+		sum_volume += int(frg.split()[-5])
+#		print frg_name, frg_volume
+	    print "total files:", len(victim_list), "sum_volume =", sum_volume
+	    cmnd_rm = "rm " + ' '.join(victim_list) + '\n'
+#	    print cmnd_rm
+            print
+	    #tn.write(cmnd_rm)  # EMERGANCY
+	    sleep(0.2)
+            tn.close()
+        except telnetlib.socket.error:
+            print "\t--- socket error ---"
+			
+
+if __name__ == "__main__":
+    
+    main()

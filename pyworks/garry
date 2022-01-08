@@ -1,0 +1,111 @@
+#!/usr/bin/env python
+'''service programm for stop TUSU run manage
+   v.1.01 jul,15 2021
+   author: RDV
+   '''
+import telnetlib
+import sys
+from time import sleep
+
+
+def examples_hint():
+    script_name = sys.argv[0].split('/')[-1]
+    print "EXAMPLES:", script_name, "21   - stop TUSU-1 v REK MPS A2"
+    print "         ", script_name, "112  - stop TUSU-2 v REK MPG A11"
+    print "         ", script_name, "151  - stop TUSU-1 v REK MPK A15"
+    sys.exit()
+
+
+def argument_parse():
+    if len(sys.argv) == 1:
+        print "This is stop TUSU script. Use it with argument #REK-#TUSU"
+        examples_hint()
+
+    start_rek, end_rek = 2, 17
+    tusu_num = (1, 2)
+    lvs2 = "192.168.110."
+    tusu_ip = (('37', '43'), ('45', '244'), ('57', '59'), ('35', '46'), ('187', '185'), ('245', '246'), \
+        ('162', '161'), ('47', '44'), ('40', '186'), ('41', '242'), ('158', '56'), ('160', '36'), None, \
+	('34', '163'), ('247', '248'), ('249', '250'))
+
+    try:
+        rek, tusu = int(sys.argv[1][:-1]), int(sys.argv[1][-1])
+    except ValueError:
+        print "argument error: only numbers allowed"
+        examples_hint()
+
+    if rek in range(start_rek, end_rek + 1) and rek != 14 and tusu in tusu_num:
+        proc = "mpg"
+        if rek < 8:
+            proc = "mps"
+        elif rek == 15:
+            proc = "mpk" 
+        return lvs2 + tusu_ip[rek - 2][tusu - 1], proc, 'A' + str(rek), tusu
+    else:
+        print "argument error: there isn't such tusu"
+        examples_hint()
+
+
+def kill_string(process_name):
+    return "kill -9 `ps -e | grep " + process_name + " | awk '{ print $1 }'`\n"
+
+    
+def main():
+    ip_addr, proc, rek_number, tusu_number = argument_parse()    
+    #print ip_addr, proc
+
+    print "----trying connect..."
+    try:
+        tn = telnetlib.Telnet(ip_addr)
+    except Exception:
+        print "connection error :(\nexit..."
+        sys.exit()
+    else:
+        print "connected :)"
+
+    print "----trying to login... (if there's no answer, type CTRL+C)"
+    
+    tn.read_until("login: ")
+    tn.write("root\n")
+        
+    tn.read_until("Password: ")
+    tn.write("f2line.\n")
+
+    tn.read_until("->")
+    print "login succeful :)"
+
+    print "----trying to stop process '" + proc + "' on REK 6" + prog.upper(),\
+         rec_number, "TUSU", tusu_number
+    tn.write(kill_string(proc))
+    try:
+        while True:
+            tn.write("ps -e\n")
+            sys.stdout.write('.')
+	    sys.stdout.flush()
+	    sleep(0.2)
+	    if not (proc in tn.read_very_eager()):
+                sys.stdout.write('\n')
+	        break
+        print "process '" + proc + "' succesfully killed or not working--" 
+    except KeyboardInterrupt:
+        sys.exit()
+    
+    print "----Elbrus halting..."
+    tn.write("sync&sync&halt\n")  # EMERGANCY!!!
+    while True:
+        sys.stdout.write('.')
+	sys.stdout.flush()
+        sleep(0.1)
+	try:
+            tn.read_very_eager()
+	except EOFError:
+	    sys.stdout.write('\n')
+	    print "system halted !!!"
+	    break
+
+    tn.close()
+    
+
+if __name__ == "__main__":
+    main()
+
